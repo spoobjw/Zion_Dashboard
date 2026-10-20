@@ -1,39 +1,24 @@
-const CACHE_NAME = 'zion-hub-v1';
-const OFFLINE_URLS = ['/', '/manifest.webmanifest', '/icon.svg'];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS)).then(() => self.skipWaiting())
-  );
+const CACHE_NAME = 'zion-shell-v2';
+const SHELL_URLS = ['/', '/manifest.webmanifest', '/icon.svg'];
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_URLS)).then(() => self.skipWaiting()));
 });
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(
+    keys.filter(key => key.startsWith('zion-') && key !== CACHE_NAME).map(key => caches.delete(key))
+  )).then(() => self.clients.claim()));
 });
-
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
-  if (request.method !== 'GET') return;
-
-  if (url.pathname.startsWith('/api/prayer') || url.pathname.startsWith('/api/membership') || url.pathname.startsWith('/api/sermon')) {
-    event.respondWith(
-      fetch(request)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(request, clone));
-          return res;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
-
-  event.respondWith(
-    fetch(request).catch(() => caches.match(request).then((r) => r || caches.match('/')))
-  );
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  // API responses, uploaded files and pastoral records must never enter offline storage.
+  if (!SHELL_URLS.includes(url.pathname) && !url.pathname.startsWith('/assets/')) return;
+  event.respondWith(fetch(request).then(response => {
+    if (response.ok && response.type === 'basic') {
+      const copy = response.clone();
+      event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.put(request, copy)));
+    }
+    return response;
+  }).catch(async () => (await caches.match(request)) || Response.error()));
 });

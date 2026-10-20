@@ -1,3 +1,5 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, ModuleHeader } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
   Flame,
@@ -46,6 +48,7 @@ function formatPrivacyName(name: string, mode: 'full' | 'initials', maskStudents
 }
 
 export function PrayerAppModule() {
+  const { request, error, busy } = useRequest();
   const [requests, setRequests] = useState<PrayerRequest[]>([]);
   const [selectedCircle, setSelectedCircle] = useState<string>('ALL');
   const [focusDeckMode, setFocusDeckMode] = useState<boolean>(true);
@@ -63,7 +66,8 @@ export function PrayerAppModule() {
   const [newUrgency, setNewUrgency] = useState<PrayerRequest['urgency']>('Regular');
 
   const load = async () => {
-    const res = await fetch('/api/prayer/overview');
+    const res = await request('/api/prayer/overview');
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setRequests(data.requests || []);
@@ -81,11 +85,12 @@ export function PrayerAppModule() {
   const currentCard = activeDeck[deckIndex] || activeDeck[0] || null;
 
   const handlePrayNow = async (reqItem: PrayerRequest) => {
-    await fetch('/api/prayer/pray-now', {
+    const response = await request('/api/prayer/pray-now', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: reqItem.id, journal_note: journalNote }),
     });
+    if (!response) return;
     setJournalNote('');
     await load();
     if (deckIndex < activeDeck.length - 1) {
@@ -98,7 +103,7 @@ export function PrayerAppModule() {
   const handleMarkAnswered = async (reqItem: PrayerRequest) => {
     const testimony = window.prompt('How did God answer this prayer?', reqItem.answer_testimony || 'Thankful for faithfulness and breakthrough.');
     if (testimony === null) return;
-    await fetch('/api/prayer/request', {
+    const response = await request('/api/prayer/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -107,13 +112,14 @@ export function PrayerAppModule() {
         answer_testimony: testimony,
       }),
     });
+    if (!response) return;
     load();
   };
 
   const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPerson.trim() || !newTitle.trim()) return;
-    await fetch('/api/prayer/request', {
+    const response = await request('/api/prayer/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -128,6 +134,7 @@ export function PrayerAppModule() {
         status: 'Active',
       }),
     });
+    if (!response) return;
     setNewPerson('');
     setNewSubgroup('');
     setNewTitle('');
@@ -138,17 +145,11 @@ export function PrayerAppModule() {
 
   return (
     <div className="space-y-6">
+      <StatusMessage error={error} busy={busy} />
       {/* Header */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Flame className="w-5 h-5 text-amber-400" />
-            Daily Prayer Watch — Congregation, Students, Family & Formation
-          </h2>
-          <p className="text-sm text-slate-400">
+      <ModuleHeader title="Prayer" subtitle={<>
             Smart rotation queue by urgency and longest time since last prayed
-          </p>
-        </div>
+          </>}>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setMaskStudentNames(!maskStudentNames)}
@@ -171,7 +172,7 @@ export function PrayerAppModule() {
             <Plus className="w-4 h-4" /> Add Prayer Need
           </button>
         </div>
-      </div>
+      </ModuleHeader>
 
       {/* Circle Filter Pills */}
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -258,7 +259,7 @@ export function PrayerAppModule() {
             onChange={(e) => setNewDetails(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs"
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+          <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
             Save to Prayer Deck
           </button>
         </form>

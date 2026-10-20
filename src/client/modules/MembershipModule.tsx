@@ -1,3 +1,5 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, ModuleHeader } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
   Users,
@@ -53,6 +55,7 @@ interface CareLog {
 }
 
 export function MembershipModule() {
+  const { request, error, busy } = useRequest();
   const [households, setHouseholds] = useState<Household[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [careLogs, setCareLogs] = useState<CareLog[]>([]);
@@ -78,7 +81,8 @@ export function MembershipModule() {
   const [careAddPrayer, setCareAddPrayer] = useState(true);
 
   const load = async () => {
-    const res = await fetch('/api/membership/overview');
+    const res = await request('/api/membership/overview');
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setHouseholds(data.households || []);
@@ -94,7 +98,7 @@ export function MembershipModule() {
   const handleSaveMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFirst.trim() || !newLast.trim()) return;
-    await fetch('/api/membership/member', {
+    const response = await request('/api/membership/member', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -110,6 +114,7 @@ export function MembershipModule() {
         sync_to_prayer: newCareFlag,
       }),
     });
+    if (!response) return;
     setNewFirst('');
     setNewLast('');
     setNewPhone('');
@@ -124,7 +129,7 @@ export function MembershipModule() {
   const handleSaveCareLog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!careTarget || !careSummary.trim()) return;
-    await fetch('/api/membership/care-log', {
+    const response = await request('/api/membership/care-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -135,6 +140,7 @@ export function MembershipModule() {
         add_to_prayer: careAddPrayer,
       }),
     });
+    if (!response) return;
     setCareSummary('');
     setCareFollowUp('');
     setCareTarget(null);
@@ -147,11 +153,12 @@ export function MembershipModule() {
     const reader = new FileReader();
     reader.onload = async () => {
       const base64 = String(reader.result || '').split(',')[1] || '';
-      const res = await fetch('/api/membership/import', {
+      const res = await request('/api/membership/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, base64Data: base64 }),
       });
+      if (!res) return;
       const json = await res.json();
       if (res.ok) {
         setImportStatus(`Imported ${json.imported} members from ${file.name}`);
@@ -176,16 +183,10 @@ export function MembershipModule() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Users className="w-5 h-5 text-amber-400" />
-            Zion Congregation & Pastoral Care Directory
-          </h2>
-          <p className="text-sm text-slate-400">
+      <StatusMessage error={error} busy={busy} />
+      <ModuleHeader title="People & care" subtitle={<>
             {members.length} people across {households.length} households in Sterling & NJC
-          </p>
-        </div>
+          </>}>
         <div className="flex flex-wrap items-center gap-2">
           <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 border border-slate-700">
             <Upload className="w-4 h-4 text-sky-400" />
@@ -200,7 +201,7 @@ export function MembershipModule() {
             Add Person
           </button>
         </div>
-      </div>
+      </ModuleHeader>
 
       {importStatus && (
         <div className="bg-sky-950/60 border border-sky-700/60 text-sky-200 text-xs px-4 py-2.5 rounded-lg">
@@ -278,7 +279,7 @@ export function MembershipModule() {
               onChange={(e) => setNewCareNotes(e.target.value)}
               className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-sm"
             />
-            <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+            <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
               Save Member
             </button>
           </div>
@@ -330,7 +331,7 @@ export function MembershipModule() {
             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm"
             required
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+          <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
             Record Care & Sync Prayer
           </button>
         </form>

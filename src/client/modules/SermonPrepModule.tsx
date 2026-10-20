@@ -1,14 +1,13 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, Disclosure, ModuleHeader, PrimaryAction } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
-  BookOpen,
   Sparkles,
   CheckCircle2,
   AlertTriangle,
   Sliders,
   Scissors,
   FileCheck2,
-  Copy,
-  Save,
 } from 'lucide-react';
 
 interface ManuscriptFile {
@@ -43,6 +42,7 @@ interface RefinementRecord {
 }
 
 export function SermonPrepModule() {
+  const { request, error, busy } = useRequest();
   const [manuscriptFiles, setManuscriptFiles] = useState<ManuscriptFile[]>([]);
   const [storyBibleExcerpt, setStoryBibleExcerpt] = useState('');
   const [prepResearchFilename, setPrepResearchFilename] = useState('');
@@ -90,7 +90,8 @@ export function SermonPrepModule() {
   const [docxVerification, setDocxVerification] = useState<Record<string, unknown> | null>(null);
 
   const load = async () => {
-    const res = await fetch('/api/sermon/overview?series=Eden_People');
+    const res = await request('/api/sermon/overview?series=Eden_People');
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setManuscriptFiles(data.manuscriptFiles || []);
@@ -100,6 +101,7 @@ export function SermonPrepModule() {
       setRocketStoriesExcerpt(data.rocketStoriesExcerpt || '');
       if (data.refinements?.[0]) {
         setRefinement(data.refinements[0]);
+        setWizardStep(Math.max(1, Math.min(6, Number(data.refinements[0].wizard_step) || 1)));
       }
     }
   };
@@ -108,42 +110,43 @@ export function SermonPrepModule() {
     load();
   }, []);
 
-  const runPreachEvaluation = async () => {
-    const res = await fetch('/api/sermon/evaluate-preach', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        bottom_line: refinement.bottom_line,
-        sticky_image: refinement.sticky_image,
-      }),
-    });
-    if (res.ok) {
-      setPreachEval(await res.json());
-    }
-  };
-
   useEffect(() => {
-    runPreachEvaluation();
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch('/api/sermon/evaluate-preach', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bottom_line: refinement.bottom_line, sticky_image: refinement.sticky_image }),
+          signal: controller.signal,
+        });
+        if (res.ok && !controller.signal.aborted) setPreachEval(await res.json());
+      } catch { /* The editor remains usable when diagnostics are unavailable. */ }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [refinement.bottom_line, refinement.sticky_image]);
 
   const handleSaveRefinement = async () => {
-    const res = await fetch('/api/sermon/refinement', {
+    const res = await request('/api/sermon/refinement', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...refinement, wizard_step: wizardStep }),
     });
+    if (!res) return;
     if (res.ok) {
-      setStatusBanner('Refinement Wizard state saved to SQLite.');
+      const saved = await res.json();
+      setRefinement(previous => ({ ...previous, id: saved.id }));
+      setStatusBanner('Refinement saved.');
     }
   };
 
   const handleVerifyPreachableDocx = async () => {
     setStatusBanner('Inspecting newest *_Preachable.docx XML styles & green boxes...');
-    const res = await fetch('/api/sermon/verify-preachable-docx', {
+    const res = await request('/api/sermon/verify-preachable-docx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ series_folder: refinement.series_folder }),
     });
+    if (!res) return;
     const json = await res.json();
     if (res.ok) {
       setDocxVerification(json);
@@ -173,43 +176,17 @@ export function SermonPrepModule() {
   const skillPromptCommand = `/sermon-prep Prep ${refinement.sermon_code} (${refinement.sermon_title}) on ${refinement.scripture_ref} in C:\\Claude_Cowork_Projects\\Zion_CoWork\\${refinement.series_folder}`;
 
   return (
-    <div className="space-y-6">
-      {/* Header & /sermon-prep Skill Hook */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-amber-400" />
-            Sermon Prep & Post-1st-Draft Refinement Wizard
-          </h2>
-          <p className="text-sm text-slate-400">
-            Connected to <code className="text-amber-300">Zion_CoWork\{refinement.series_folder}</code> · Story Bible · Preaching Rocket & Donkey Synthesis
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(skillPromptCommand);
-              setStatusBanner('Copied /sermon-prep launch command to clipboard for Claude/Cursor.');
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-semibold"
-          >
-            <Copy className="w-3.5 h-3.5" /> Copy /sermon-prep Prompt
-          </button>
-          <button
-            onClick={handleSaveRefinement}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold"
-          >
-            <Save className="w-4 h-4" /> Save Wizard State
-          </button>
-        </div>
-      </div>
-
-      {statusBanner && (
-        <div className="bg-amber-950/60 border border-amber-700/60 text-amber-200 text-xs px-4 py-2.5 rounded-lg">
-          {statusBanner}
-        </div>
-      )}
-
+    <div className="space-y-6" onChangeCapture={() => setStatusBanner('')}>
+      <StatusMessage error={error} busy={busy} />
+      <ModuleHeader title="Sermon" subtitle={refinement.sermon_title + ' | ' + refinement.scripture_ref}>
+        <PrimaryAction disabled={busy} onClick={handleSaveRefinement}>Save refinement</PrimaryAction>
+      </ModuleHeader>
+      <Disclosure title="Sermon details & preparation tools">
+        <p className="text-sm text-slate-400">Series: {refinement.series_folder}</p>
+        <button type="button" className="secondary-action" onClick={async () => {
+          try { await navigator.clipboard.writeText(skillPromptCommand); setStatusBanner('Preparation prompt copied.'); }
+          catch { setStatusBanner('Clipboard unavailable. Open this dashboard on localhost or a secure connection.'); }
+        }}>Copy preparation prompt</button>
       {/* Active Sermon Identity Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-900 border border-slate-800 rounded-xl p-4">
         <label className="text-xs space-y-1">
@@ -250,30 +227,29 @@ export function SermonPrepModule() {
         </label>
       </div>
 
+      </Disclosure>
+      {statusBanner && (
+        <div role="status" className="request-status">
+          {statusBanner}
+        </div>
+      )}
+
       {/* 6-Step Post-Draft Refinement Wizard Navigation */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-5">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
             <Sparkles className="w-4 h-4" />
-            Post-1st-Draft Refinement Wizard
+            Refinement
           </h3>
           <span className="text-xs text-slate-400">Step {wizardStep} of 6</span>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {wizardSteps.map((s) => (
-            <button
-              key={s.num}
-              onClick={() => setWizardStep(s.num)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                wizardStep === s.num
-                  ? 'bg-amber-500 text-slate-950 font-bold'
-                  : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
+        <div className="wizard-navigation">
+          <label htmlFor="refinement-step">Continue refinement</label>
+          <select id="refinement-step" value={wizardStep} onChange={e => setWizardStep(Number(e.target.value))}>
+            {wizardSteps.map(step => <option key={step.num} value={step.num}>{step.label}</option>)}
+          </select>
+          <div className="flex gap-2"><button type="button" className="secondary-action" disabled={wizardStep === 1} onClick={() => setWizardStep(n => n - 1)}>Previous</button><button type="button" className="secondary-action" disabled={wizardStep === 6} onClick={() => setWizardStep(n => n + 1)}>Next</button></div>
         </div>
 
         {/* WIZARD STEP 1: Bottom Line & Sticky Image P-R-E-A-C-H Lab */}
@@ -283,7 +259,7 @@ export function SermonPrepModule() {
               <div className="space-y-3">
                 <label className="block space-y-1 text-xs">
                   <span className="text-slate-300 font-semibold">
-                    Load-Bearing Bottom Line (1 sentence, 9th-grade simple, sayable 3x)
+                    Bottom line (one clear sentence)
                   </span>
                   <textarea
                     rows={3}
@@ -294,7 +270,7 @@ export function SermonPrepModule() {
                 </label>
                 <label className="block space-y-1 text-xs">
                   <span className="text-slate-300 font-semibold">
-                    Distilled Sticky Image (Concrete rural Colorado picture to carry home)
+                    Concrete image to carry home
                   </span>
                   <input
                     value={refinement.sticky_image}
@@ -305,7 +281,7 @@ export function SermonPrepModule() {
               </div>
 
               {preachEval && (
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 text-xs">
+                <Disclosure title="Bottom line diagnostics">
                   <div className="font-bold text-slate-200 flex items-center justify-between">
                     <span>Preaching Rocket P-R-E-A-C-H Diagnostic</span>
                     <span
@@ -352,7 +328,7 @@ export function SermonPrepModule() {
                       <span>Sayable 3x Without Breath Loss</span>
                     </div>
                   </div>
-                </div>
+                </Disclosure>
               )}
             </div>
           </div>
@@ -575,7 +551,7 @@ export function SermonPrepModule() {
       </div>
 
       {/* Series Manuscript Files Inventory */}
-      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4">
+      <Disclosure title="Manuscripts & research files">
         <h3 className="text-sm font-bold text-white mb-3">
           Recent Manuscripts & Research Files in <code className="text-amber-300">00_Sermon_Manuscripts</code>
         </h3>
@@ -589,7 +565,7 @@ export function SermonPrepModule() {
             </div>
           ))}
         </div>
-      </div>
+      </Disclosure>
     </div>
   );
 }

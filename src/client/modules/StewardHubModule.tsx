@@ -1,3 +1,5 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, ModuleHeader } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
   Share2,
@@ -27,6 +29,7 @@ interface StewardBlock {
 }
 
 export function StewardHubModule() {
+  const { request, error, busy } = useRequest();
   const [daemonOnline, setDaemonOnline] = useState(false);
   const [stewardPort, setStewardPort] = useState(3000);
   const [stewardBlocks, setStewardBlocks] = useState<StewardBlock[]>([]);
@@ -53,7 +56,8 @@ export function StewardHubModule() {
   const [doNotPostRaw, setDoNotPostRaw] = useState('Closing communion illustration reveal');
 
   const load = async () => {
-    const res = await fetch('/api/steward/overview');
+    const res = await request('/api/steward/overview');
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setDaemonOnline(Boolean(data.daemonOnline));
@@ -70,7 +74,7 @@ export function StewardHubModule() {
 
   const handleSaveStewardBlock = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/steward/save-block', {
+    const res = await request('/api/steward/save-block', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -93,6 +97,7 @@ export function StewardHubModule() {
           .filter(Boolean),
       }),
     });
+    if (!res) return;
     const json = await res.json();
     if (res.ok) {
       setStatusMessage(
@@ -106,11 +111,12 @@ export function StewardHubModule() {
   };
 
   const handleProxyAction = async (endpoint: string, payload: Record<string, unknown>) => {
-    const res = await fetch('/api/steward/proxy', {
+    const res = await request('/api/steward/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, payload }),
     });
+    if (!res) return;
     const json = await res.json();
     if (res.ok) {
       setStatusMessage(`Steward executed ${endpoint} successfully.`);
@@ -122,17 +128,9 @@ export function StewardHubModule() {
 
   return (
     <div className="space-y-6">
+      <StatusMessage error={error} busy={busy} />
       {/* Header */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Share2 className="w-5 h-5 text-sky-400" />
-            Steward Social Media Bot Hub (Facebook & Instagram)
-          </h2>
-          <p className="text-sm text-slate-400">
-            Connected to <code className="text-sky-300">C:\Codex_Projects\Social_Media_Bot</code> &amp; <code className="text-amber-300">Eden_People_Social_Media_Campaign.md</code>
-          </p>
-        </div>
+      <ModuleHeader title="Steward" subtitle="Draft campaigns and review the posting queue.">
 
         <div className="flex flex-wrap items-center gap-2">
           <span
@@ -143,7 +141,7 @@ export function StewardHubModule() {
             }`}
           >
             <span className={`w-2 h-2 rounded-full ${daemonOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-            {daemonOnline ? `Steward Live (127.0.0.1:${stewardPort})` : 'Direct File & State Mode'}
+            {daemonOnline ? `Steward Live (127.0.0.1:${stewardPort})` : 'Steward offline'}
           </span>
           <button
             onClick={load}
@@ -155,10 +153,10 @@ export function StewardHubModule() {
             onClick={() => setShowEditor(!showEditor)}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold"
           >
-            <Plus className="w-4 h-4" /> Write ```steward Campaign Block
+            <Plus className="w-4 h-4" /> New campaign draft
           </button>
         </div>
-      </div>
+      </ModuleHeader>
 
       {statusMessage && (
         <div className="bg-sky-950/60 border border-sky-700/60 text-sky-200 text-xs px-4 py-2.5 rounded-lg">
@@ -286,7 +284,7 @@ export function StewardHubModule() {
             </label>
           </div>
 
-          <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+          <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
             Append Block to Eden_People_Social_Media_Campaign.md
           </button>
         </form>

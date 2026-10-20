@@ -62,8 +62,8 @@ export async function handleSermonPrepRoutes(
       : '';
 
     const refinements = db
-      .prepare('SELECT * FROM sermon_refinements ORDER BY updated_at DESC')
-      .all() as Array<Record<string, unknown>>;
+      .prepare('SELECT * FROM sermon_refinements WHERE series_folder = ? ORDER BY updated_at DESC')
+      .all(seriesFolder) as Array<Record<string, unknown>>;
 
     sendJson(res, {
       seriesFolder,

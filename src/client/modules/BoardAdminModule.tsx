@@ -1,3 +1,5 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, ModuleHeader } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
   ClipboardList,
@@ -34,6 +36,7 @@ interface BoardMotion {
 }
 
 export function BoardAdminModule() {
+  const { request, error, busy } = useRequest();
   const [projects, setProjects] = useState<BoardProject[]>([]);
   const [motions, setMotions] = useState<BoardMotion[]>([]);
   const [packetMarkdown, setPacketMarkdown] = useState('');
@@ -57,7 +60,8 @@ export function BoardAdminModule() {
   const [voteResult, setVoteResult] = useState('Passed Unanimously');
 
   const load = async () => {
-    const res = await fetch('/api/board/overview');
+    const res = await request('/api/board/overview');
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setProjects(data.projects || []);
@@ -72,7 +76,7 @@ export function BoardAdminModule() {
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    await fetch('/api/board/project', {
+    const response = await request('/api/board/project', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -87,6 +91,7 @@ export function BoardAdminModule() {
         description,
       }),
     });
+    if (!response) return;
     setTitle('');
     setOwner('');
     setDescription('');
@@ -96,18 +101,19 @@ export function BoardAdminModule() {
   };
 
   const handleUpdateProjectStatus = async (proj: BoardProject, nextStatus: string) => {
-    await fetch('/api/board/project', {
+    const response = await request('/api/board/project', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...proj, status: nextStatus }),
     });
+    if (!response) return;
     load();
   };
 
   const handleSaveMotion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!motionText.trim()) return;
-    await fetch('/api/board/motion', {
+    const response = await request('/api/board/motion', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -118,19 +124,21 @@ export function BoardAdminModule() {
         vote_result: voteResult,
       }),
     });
+    if (!response) return;
     setMotionText('');
     setShowNewMotion(false);
     load();
   };
 
   const handleGeneratePacket = async () => {
-    const res = await fetch('/api/board/generate-packet', {
+    const res = await request('/api/board/generate-packet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         meeting_date: new Date().toISOString().slice(0, 10),
       }),
     });
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setPacketMarkdown(data.packetMarkdown || '');
@@ -141,16 +149,10 @@ export function BoardAdminModule() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <ClipboardList className="w-5 h-5 text-amber-400" />
-            Zion Church Board Administration & Project Tracker
-          </h2>
-          <p className="text-sm text-slate-400">
+      <StatusMessage error={error} busy={busy} />
+      <ModuleHeader title="Board" subtitle={<>
             Track trustees/deacons projects, formal board motions, and generate monthly Board Meeting packets
-          </p>
-        </div>
+          </>}>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={handleGeneratePacket}
@@ -174,7 +176,7 @@ export function BoardAdminModule() {
             New Board Project
           </button>
         </div>
-      </div>
+      </ModuleHeader>
 
       {showNewProject && (
         <form onSubmit={handleSaveProject} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
@@ -232,7 +234,7 @@ export function BoardAdminModule() {
             onChange={(e) => setDescription(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm"
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+          <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
             Save Board Project
           </button>
         </form>
@@ -279,7 +281,7 @@ export function BoardAdminModule() {
             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-sm"
             required
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+          <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
             Save Motion
           </button>
         </form>

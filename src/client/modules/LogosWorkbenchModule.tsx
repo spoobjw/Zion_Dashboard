@@ -1,3 +1,5 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, ModuleHeader } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
   Library,
@@ -30,6 +32,7 @@ interface ProvenResource {
 }
 
 export function LogosWorkbenchModule() {
+  const { request, error, busy } = useRequest();
   const [reference, setReference] = useState('Matthew 5:17-20');
   const [notes, setNotes] = useState<LogosNote[]>([]);
   const [provenResources, setProvenResources] = useState<ProvenResource[]>([]);
@@ -64,7 +67,8 @@ export function LogosWorkbenchModule() {
   const [noteSummary, setNoteSummary] = useState('');
 
   const load = async (ref = reference) => {
-    const res = await fetch(`/api/logos/overview?reference=${encodeURIComponent(ref)}`);
+    const res = await request(`/api/logos/overview?reference=${encodeURIComponent(ref)}`);
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       setNotes(data.notes || []);
@@ -80,11 +84,12 @@ export function LogosWorkbenchModule() {
   const handleLaunchBuiltInBrowser = async (guide: 'passage' | 'exegetical' | 'sermon-starter', directUrl?: string) => {
     setBrowserLoading(true);
     setStatusMsg(`Opening built-in Logos browser session for ${reference} (${guide})...`);
-    const res = await fetch('/api/logos/browser/launch', {
+    const res = await request('/api/logos/browser/launch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reference, guide, directUrl }),
     });
+    if (!res) { setBrowserLoading(false); return; }
     const json = await res.json();
     setBrowserLoading(false);
     if (res.ok) {
@@ -96,7 +101,8 @@ export function LogosWorkbenchModule() {
   };
 
   const handleRestoreFullView = async () => {
-    const res = await fetch('/api/logos/browser/restore-full-view', { method: 'POST' });
+    const res = await request('/api/logos/browser/restore-full-view', { method: 'POST' });
+    if (!res) return;
     const json = await res.json();
     if (res.ok) {
       setStatusMsg(`Full View Mode Verified Restored (no: ${String(json.fullViewRestored)}). Notes & highlights visible.`);
@@ -106,7 +112,7 @@ export function LogosWorkbenchModule() {
   const handleSaveNote = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!noteSummary.trim()) return;
-    await fetch('/api/logos/note', {
+    const response = await request('/api/logos/note', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -120,6 +126,7 @@ export function LogosWorkbenchModule() {
         summary_markdown: noteSummary,
       }),
     });
+    if (!response) return;
     setNoteTitle('');
     setNoteCommentator('');
     setNoteLogosId('');
@@ -132,17 +139,9 @@ export function LogosWorkbenchModule() {
 
   return (
     <div className="space-y-6">
+      <StatusMessage error={error} busy={busy} />
       {/* Header & Passage Input */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Library className="w-5 h-5 text-sky-400" />
-            Logos Pro Research & Bible Study Workbench (~5,000 Volumes)
-          </h2>
-          <p className="text-sm text-slate-400">
-            Built-in Chromium Controller for <code className="text-sky-300">app.logos.com</code> with Limited-View Harvester & Full-View Safety Guard
-          </p>
-        </div>
+      <ModuleHeader title="Study" subtitle="Explore your passage and collect study notes.">
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -171,7 +170,7 @@ export function LogosWorkbenchModule() {
             <Plus className="w-4 h-4" /> Log Exegetical Note
           </button>
         </div>
-      </div>
+      </ModuleHeader>
 
       {statusMsg && (
         <div className="bg-sky-950/60 border border-sky-700/60 text-sky-200 text-xs px-4 py-2.5 rounded-lg">
@@ -359,7 +358,7 @@ export function LogosWorkbenchModule() {
             className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs"
             required
           />
-          <button type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
+          <button disabled={busy} type="submit" className="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs">
             Save Study Note
           </button>
         </form>

@@ -1,3 +1,4 @@
+import { checkAccess, checkRequestOrigin } from './access.ts';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +28,20 @@ export function createZionServer(dataDir = path.join(PROJECT_ROOT, 'data'), port
       return;
     }
 
+    res.setHeader('Cache-Control', 'no-store');
+    if (!checkAccess(req.socket.remoteAddress, req.headers.authorization)) {
+      res.setHeader('WWW-Authenticate', 'Basic realm="Zion Dashboard", charset="UTF-8"');
+      sendError(res, process.env.ZION_ACCESS_PASSWORD ? 'Sign in with your dashboard credentials.' : 'Remote access requires ZION_ACCESS_PASSWORD on the server.', 401);
+      return;
+    }
+    if (!checkRequestOrigin(req)) {
+      sendError(res, 'Cross-origin requests are not allowed.', 403);
+      return;
+    }
+    if (req.method === 'POST' && !req.headers['content-type']?.toLowerCase().startsWith('application/json')) {
+      sendError(res, 'Requests must use application/json.', 415);
+      return;
+    }
     res.setHeader('X-Content-Type-Options', 'nosniff');
 
     try {

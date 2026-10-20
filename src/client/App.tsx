@@ -7,8 +7,9 @@ import {
   Library,
   Share2,
   Flame,
-  Smartphone,
-  Cpu,
+
+  MoreHorizontal,
+  Settings,
 } from 'lucide-react';
 import { MembershipModule } from './modules/MembershipModule.tsx';
 import { FinancesModule } from './modules/FinancesModule.tsx';
@@ -18,109 +19,65 @@ import { LogosWorkbenchModule } from './modules/LogosWorkbenchModule.tsx';
 import { StewardHubModule } from './modules/StewardHubModule.tsx';
 import { PrayerAppModule } from './modules/PrayerAppModule.tsx';
 
-export type ModuleKey =
-  | 'prayer'
-  | 'sermon'
-  | 'logos'
-  | 'membership'
-  | 'finances'
-  | 'board'
-  | 'steward';
-
+import { Disclosure } from './components/ui.tsx';
+const modules = [
+  { key: 'sermon', label: 'Sermon', group: 'Ministry', icon: BookOpen, component: SermonPrepModule },
+  { key: 'logos', label: 'Study', group: 'Ministry', icon: Library, component: LogosWorkbenchModule },
+  { key: 'prayer', label: 'Prayer', group: 'Ministry', icon: Flame, component: PrayerAppModule },
+  { key: 'membership', label: 'People', group: 'Administration', icon: Users, component: MembershipModule },
+  { key: 'finances', label: 'Finance', group: 'Administration', icon: DollarSign, component: FinancesModule },
+  { key: 'board', label: 'Board', group: 'Administration', icon: ClipboardList, component: BoardAdminModule },
+  { key: 'steward', label: 'Steward', group: 'Communications', icon: Share2, component: StewardHubModule },
+] as const;
+export type ModuleKey = typeof modules[number]['key'];
 export default function App() {
   const [activeTab, setActiveTab] = useState<ModuleKey>('sermon');
-  const [health, setHealth] = useState<{
-    port: number;
-    network: { lan: string[]; tailscale: string[] };
-  } | null>(null);
-  const [showAiGuide, setShowAiGuide] = useState(false);
-
+  const [visited, setVisited] = useState<Set<ModuleKey>>(() => new Set(['sermon']));
+  const [showSettings, setShowSettings] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [mobileUrl, setMobileUrl] = useState('');
+  const [cacheMessage, setCacheMessage] = useState('');
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((d) => setHealth(d))
-      .catch(() => undefined);
+    fetch('/api/health', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(data => {
+      setMobileUrl(data?.network?.tailscale?.[0] || data?.network?.lan?.[0] || '');
+    }).catch(() => undefined);
   }, []);
-
-  const navItems: Array<{ key: ModuleKey; label: string; shortLabel: string; icon: React.ReactNode }> = [
-    { key: 'sermon', label: '4. Sermon Prep & Wizard', shortLabel: 'Sermon', icon: <BookOpen className="w-4 h-4" /> },
-    { key: 'logos', label: '5. Logos Bible Study', shortLabel: 'Logos', icon: <Library className="w-4 h-4" /> },
-    { key: 'prayer', label: '7. Daily Prayer App', shortLabel: 'Prayer', icon: <Flame className="w-4 h-4" /> },
-    { key: 'membership', label: '1. Membership & Care', shortLabel: 'People', icon: <Users className="w-4 h-4" /> },
-    { key: 'finances', label: '2. Church Finances (PDF)', shortLabel: 'Finance', icon: <DollarSign className="w-4 h-4" /> },
-    { key: 'board', label: '3. Board Administration', shortLabel: 'Board', icon: <ClipboardList className="w-4 h-4" /> },
-    { key: 'steward', label: '6. Steward Social Bot', shortLabel: 'Steward', icon: <Share2 className="w-4 h-4" /> },
-  ];
-
-  const renderActiveModule = (tab: ModuleKey) => {
-    switch (tab) {
-      case 'membership':
-        return <MembershipModule />;
-      case 'finances':
-        return <FinancesModule />;
-      case 'board':
-        return <BoardAdminModule />;
-      case 'sermon':
-        return <SermonPrepModule />;
-      case 'logos':
-        return <LogosWorkbenchModule />;
-      case 'steward':
-        return <StewardHubModule />;
-      case 'prayer':
-        return <PrayerAppModule />;
-      default: {
-        const _exhaustiveCheck: never = tab;
-        return _exhaustiveCheck;
-      }
-    }
+  const selectModule = (key: ModuleKey) => {
+    setVisited(previous => new Set([...previous, key])); setActiveTab(key);
+    setShowMore(false); setShowSettings(false);
   };
-
-  const mobileUrl =
-    health?.network?.tailscale?.[0] || health?.network?.lan?.[0] || 'http://127.0.0.1:3400';
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-20 lg:pb-8">
-      {/* Top Bar */}
-      <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur border-b border-slate-800 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-black">
-              Z
-            </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-bold text-white leading-tight">
-                Zion Congregational Church Dashboard
-              </h1>
-              <p className="text-xs text-slate-400">
-                Sterling, CO · Pastoral Ministry, Administration, Sermon Prep &amp; Prayer
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowAiGuide(!showAiGuide)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-amber-300"
-            >
-              <Cpu className="w-3.5 h-3.5" /> Multi-AI Stack Playbook
-            </button>
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-sky-300">
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Android PWA: {mobileUrl}</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Multi-AI Subscription Playbook Drawer */}
-      {showAiGuide && (
+  const navButton = (item: typeof modules[number]) => <button key={item.key} type="button"
+    aria-current={!showSettings && activeTab === item.key ? 'page' : undefined}
+    onClick={() => selectModule(item.key)} className="nav-item"><item.icon size={19} aria-hidden="true" />{item.label}</button>;
+  const clearCache = async () => {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(key => key.startsWith('zion-')).map(key => caches.delete(key)));
+      }
+      setCacheMessage('Dashboard offline cache cleared.');
+    } catch { setCacheMessage('Could not clear the cache. Please try again.'); }
+  };
+  return <div className="dashboard-shell">
+    <header className="app-header"><div><h1>Zion</h1><span>Ministry workspace</span></div>
+      <button type="button" className="settings-button" aria-expanded={showSettings} onClick={() => { setShowSettings(!showSettings); setShowMore(false); }}><Settings size={18} />Help & settings</button>
+    </header>
+    <aside className="sidebar"><nav aria-label="Modules">{['Ministry', 'Administration', 'Communications'].map(group =>
+      <div key={group} className="nav-group"><p>{group}</p>{modules.filter(item => item.group === group).map(navButton)}</div>
+    )}</nav><p className="sidebar-note">Zion Congregational Church<br />Sterling, Colorado</p></aside>
+    <main className="workspace">
+      {showSettings && <section aria-label="Help and settings" className="settings-panel"><h2>Help & settings</h2>
+        <Disclosure title="Connect another device"><p>Open the dashboard through your private connection. Remote devices require the access credentials configured on the server.</p>{mobileUrl && <p className="break-all">{mobileUrl}</p>}</Disclosure>
+        <Disclosure title="Privacy & offline storage"><p>Pastoral and financial records are fetched from the server and are not saved for offline use. Drafts stay in memory while you switch modules; save before reloading or closing this page.</p><button type="button" className="secondary-action" onClick={clearCache}>Clear dashboard cache</button><p role="status">{cacheMessage}</p></Disclosure>
+      <Disclosure title="AI workflow playbook">
+      {showSettings && (
         <div className="max-w-7xl mx-auto px-4 pt-4">
           <div className="bg-slate-900 border border-amber-500/40 rounded-xl p-4 text-xs space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-bold text-amber-400">
                 Multi-AI Workflow Routing (Cursor Pro+ · Claude Pro · ChatGPT/Codex Plus · Gemini Plus · Grok)
               </span>
-              <button onClick={() => setShowAiGuide(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white">
                 Close
               </button>
             </div>
@@ -160,44 +117,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Desktop Module Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 pt-4 hidden lg:block">
-        <nav className="flex items-center gap-2 bg-slate-900/90 border border-slate-800 rounded-xl p-1.5 overflow-x-auto">
-          {navItems.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setActiveTab(item.key)}
-              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${
-                activeTab === item.key
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Main Module Viewport */}
-      <main className="max-w-7xl mx-auto px-4 pt-4">{renderActiveModule(activeTab)}</main>
-
-      {/* Android Thumb-Friendly Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-slate-950/95 backdrop-blur border-t border-slate-800 flex items-center justify-around py-1.5 px-1 lg:hidden">
-        {navItems.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => setActiveTab(item.key)}
-            className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-medium ${
-              activeTab === item.key ? 'text-amber-400 font-bold' : 'text-slate-400'
-            }`}
-          >
-            {item.icon}
-            <span className="mt-0.5">{item.shortLabel}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
-  );
+      </Disclosure>
+      </section>}
+      {modules.filter(item => visited.has(item.key)).map(item => <section key={item.key} hidden={showSettings || activeTab !== item.key} aria-label={item.label} className="module-view"><item.component /></section>)}
+    </main>
+    {showMore && <div className="mobile-more"><nav aria-label="More modules">{modules.slice(3).map(navButton)}</nav></div>}
+    <nav className="mobile-nav" aria-label="Quick navigation">{modules.slice(0, 3).map(navButton)}<button type="button" className="nav-item" aria-expanded={showMore} aria-current={!showSettings && modules.slice(3).some(item => item.key === activeTab) ? 'page' : undefined} onClick={() => setShowMore(!showMore)}><MoreHorizontal size={19} />More</button></nav>
+  </div>;
 }

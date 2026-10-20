@@ -1,3 +1,5 @@
+import { useRequest } from '../useRequest.ts';
+import { StatusMessage, Disclosure, ModuleHeader } from '../components/ui.tsx';
 import React, { useEffect, useState } from 'react';
 import {
   DollarSign,
@@ -45,6 +47,7 @@ interface FinanceDoc {
 }
 
 export function FinancesModule() {
+  const { request, error, busy } = useRequest();
   const [documents, setDocuments] = useState<FinanceDoc[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
   const [ocrEngine, setOcrEngine] = useState<'gemini-2.5-pro-vision' | 'claude-sonnet-vision'>('gemini-2.5-pro-vision');
@@ -56,7 +59,8 @@ export function FinancesModule() {
   const [editDoc, setEditDoc] = useState<FinanceDoc | null>(null);
 
   const load = async (selectId?: string) => {
-    const res = await fetch('/api/finances/overview');
+    const res = await request('/api/finances/overview');
+    if (!res) return;
     if (res.ok) {
       const data = await res.json();
       const docs: FinanceDoc[] = data.documents || [];
@@ -87,7 +91,7 @@ export function FinancesModule() {
     const reader = new FileReader();
     reader.onload = async () => {
       const base64Pdf = String(reader.result || '').split(',')[1] || '';
-      const res = await fetch('/api/finances/upload-scan', {
+      const res = await request('/api/finances/upload-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,6 +102,7 @@ export function FinancesModule() {
           ocr_engine: ocrEngine,
         }),
       });
+      if (!res) { setUploading(false); return; }
       const json = await res.json();
       setUploading(false);
       if (res.ok) {
@@ -112,7 +117,7 @@ export function FinancesModule() {
 
   const handleSaveVerification = async (status: 'pending_review' | 'verified') => {
     if (!editDoc) return;
-    const res = await fetch('/api/finances/verify-document', {
+    const res = await request('/api/finances/verify-document', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -120,6 +125,7 @@ export function FinancesModule() {
         status,
       }),
     });
+    if (!res) return;
     if (res.ok) {
       setSaveMessage(status === 'verified' ? 'Statement verified and committed to SQLite ledger.' : 'Draft changes saved.');
       load(editDoc.id);
@@ -174,20 +180,15 @@ export function FinancesModule() {
 
   return (
     <div className="space-y-6">
+      <StatusMessage error={error} busy={busy} />
       {/* Top Upload & OCR Bar */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-400" />
-            Church Finances — Scanned PDF Statements & Annual Reports
-          </h2>
-          <p className="text-sm text-slate-400">
+      <ModuleHeader title="Finance" subtitle={<>
             Ingest scanned monthly treasurer PDFs & yearly annual reports with side-by-side math verification
-          </p>
-        </div>
+          </>}>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <Disclosure title="Upload a statement">
           <select
+            aria-label="Statement period"
             value={periodType}
             onChange={(e) => setPeriodType(e.target.value as 'monthly' | 'annual')}
             className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200"
@@ -197,12 +198,14 @@ export function FinancesModule() {
           </select>
           <input
             type="text"
+            aria-label="Statement date"
             value={statementDate}
             onChange={(e) => setStatementDate(e.target.value)}
             placeholder="YYYY-MM or YYYY"
             className="w-28 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200"
           />
           <select
+            aria-label="Extraction tool"
             value={ocrEngine}
             onChange={(e) => setOcrEngine(e.target.value as 'gemini-2.5-pro-vision' | 'claude-sonnet-vision')}
             className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-amber-300"
@@ -215,8 +218,8 @@ export function FinancesModule() {
             {uploading ? 'Extracting PDF...' : 'Upload Scanned PDF'}
             <input type="file" accept="application/pdf" className="hidden" onChange={handlePdfUpload} disabled={uploading} />
           </label>
-        </div>
-      </div>
+        </Disclosure>
+      </ModuleHeader>
 
       {saveMessage && (
         <div className="bg-emerald-950/60 border border-emerald-700/60 text-emerald-200 text-xs px-4 py-2.5 rounded-lg">
